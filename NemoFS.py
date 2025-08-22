@@ -2,7 +2,7 @@ import sys, os, mimetypes
 from PySide6.QtWidgets import (
     QApplication, QListView, QWidget, QVBoxLayout, QHBoxLayout,
     QFileSystemModel, QLineEdit, QPushButton, QListWidget, QListWidgetItem,
-    QLabel, QTextEdit, QSplitter
+    QTextEdit, QSplitter
 )
 from PySide6.QtGui import QColor, QBrush, QPixmap
 from PySide6.QtCore import QDir, QSize, Qt
@@ -11,7 +11,7 @@ from datetime import datetime
 class MiniExplorer(QWidget):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Mini Explorador con Favoritos y Panel de Información")
+        self.setWindowTitle("Mini Explorador Lista")
         self.resize(1200, 600)
 
         self.history = []
@@ -23,14 +23,13 @@ class MiniExplorer(QWidget):
         self.home = os.path.expanduser("~")
         self.model.setRootPath(self.home)
 
-        # Vista principal de carpetas/archivos
+        # Vista principal de carpetas/archivos (modo lista)
         self.view = QListView()
         self.view.setModel(self.model)
         self.view.setRootIndex(self.model.index(self.home))
-        self.view.setViewMode(QListView.IconMode)
-        self.view.setIconSize(QSize(64,64))
-        self.view.setGridSize(QSize(120,110))
-        self.view.setSpacing(10)
+        self.view.setViewMode(QListView.ListMode)      # <-- modo lista
+        self.view.setIconSize(QSize(24,24))           # íconos pequeños
+        self.view.setSpacing(5)
         self.view.doubleClicked.connect(self.enter_item)
         self.view.clicked.connect(self.show_info)
 
@@ -65,7 +64,7 @@ class MiniExplorer(QWidget):
         self.info_panel.setReadOnly(True)
         self.info_panel.setMinimumWidth(300)
 
-        # Layout principal con splitter para redimensionar
+        # Layout principal con splitter
         splitter = QSplitter(Qt.Horizontal)
         splitter.addWidget(fav_panel)
         splitter.addWidget(self.view)
@@ -89,7 +88,7 @@ class MiniExplorer(QWidget):
             self.path_bar.setText(path)
             self.push_history(path)
         else:
-            self.show_info(index)  # mostrar info también para archivos
+            self.show_info(index)
 
     def navigate_to_path(self):
         path = self.path_bar.text()
@@ -150,7 +149,6 @@ class MiniExplorer(QWidget):
             modified = datetime.fromtimestamp(os.path.getmtime(path)).strftime("%Y-%m-%d %H:%M:%S")
             info_text += f"Tipo: Archivo\nExtensión: {ext}\nTamaño: {size} bytes\nCreación: {created}\nModificación: {modified}\n"
 
-            # Vista previa para imágenes
             mimetype,_ = mimetypes.guess_type(path)
             if mimetype and mimetype.startswith("image"):
                 pixmap = QPixmap(path)
@@ -160,7 +158,6 @@ class MiniExplorer(QWidget):
                     self.info_panel.append(info_text)
                     self.info_panel.append("\nVista previa:")
                     self.info_panel.document().addResource(1, path, pixmap)
-                    # Usamos HTML simple para mostrar
                     self.info_panel.append(f'<img src="{path}">')
                     return
 
