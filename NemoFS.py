@@ -2,7 +2,7 @@ import sys, os, mimetypes
 from PySide6.QtWidgets import (
     QApplication, QListView, QWidget, QVBoxLayout, QHBoxLayout,
     QFileSystemModel, QLineEdit, QPushButton, QListWidget, QListWidgetItem,
-    QTextEdit, QSplitter
+    QLabel, QTextEdit, QSplitter
 )
 from PySide6.QtGui import QColor, QBrush, QPixmap
 from PySide6.QtCore import QDir, QSize, Qt
@@ -11,7 +11,7 @@ from datetime import datetime
 class MiniExplorer(QWidget):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Mini Explorador Lista")
+        self.setWindowTitle("Mini Explorador Lista Mejorado")
         self.resize(1200, 600)
 
         self.history = []
@@ -23,15 +23,17 @@ class MiniExplorer(QWidget):
         self.home = os.path.expanduser("~")
         self.model.setRootPath(self.home)
 
-        # Vista principal de carpetas/archivos (modo lista)
+        # Vista principal
         self.view = QListView()
         self.view.setModel(self.model)
         self.view.setRootIndex(self.model.index(self.home))
-        self.view.setViewMode(QListView.ListMode)      # <-- modo lista
-        self.view.setIconSize(QSize(24,24))           # íconos pequeños
+        self.view.setViewMode(QListView.ListMode)
+        self.view.setIconSize(QSize(24,24))
         self.view.setSpacing(5)
         self.view.doubleClicked.connect(self.enter_item)
-        self.view.clicked.connect(self.show_info)
+
+        # Conectar la selección con teclado o mouse
+        self.view.selectionModel().currentChanged.connect(self.show_info)
 
         # Barra de búsqueda + botón atrás
         self.path_bar = QLineEdit(self.home)
@@ -43,32 +45,43 @@ class MiniExplorer(QWidget):
         top_bar.addWidget(self.back_button)
         top_bar.addWidget(self.path_bar)
 
-        # Barra lateral de favoritos
+        # Barra lateral favoritos
         self.fav_list = QListWidget()
         self.fav_list.setFixedWidth(200)
         self.fav_list.itemClicked.connect(self.favorite_clicked)
         self.favorites = []
-
         add_fav_btn = QPushButton("Agregar a Favoritos")
         add_fav_btn.clicked.connect(self.add_favorite)
-
         fav_layout = QVBoxLayout()
         fav_layout.addWidget(self.fav_list)
         fav_layout.addWidget(add_fav_btn)
-
         fav_panel = QWidget()
         fav_panel.setLayout(fav_layout)
 
-        # Panel de información
-        self.info_panel = QTextEdit()
-        self.info_panel.setReadOnly(True)
-        self.info_panel.setMinimumWidth(300)
+        # Panel derecho mejorado
+        self.preview_label = QLabel()
+        self.preview_label.setAlignment(Qt.AlignCenter)
+        self.preview_label.setFixedHeight(250)
+
+        self.name_button = QPushButton()
+        self.name_button.setEnabled(False)
+
+        self.info_text = QTextEdit()
+        self.info_text.setReadOnly(True)
+
+        info_layout = QVBoxLayout()
+        info_layout.addWidget(self.preview_label)
+        info_layout.addWidget(self.name_button)
+        info_layout.addWidget(self.info_text)
+        info_panel = QWidget()
+        info_panel.setLayout(info_layout)
+        info_panel.setMinimumWidth(300)
 
         # Layout principal con splitter
         splitter = QSplitter(Qt.Horizontal)
         splitter.addWidget(fav_panel)
         splitter.addWidget(self.view)
-        splitter.addWidget(self.info_panel)
+        splitter.addWidget(info_panel)
         splitter.setSizes([200,600,300])
 
         main_layout = QVBoxLayout()
@@ -87,8 +100,6 @@ class MiniExplorer(QWidget):
             self.view.setRootIndex(self.model.index(path))
             self.path_bar.setText(path)
             self.push_history(path)
-        else:
-            self.show_info(index)
 
     def navigate_to_path(self):
         path = self.path_bar.text()
@@ -131,14 +142,28 @@ class MiniExplorer(QWidget):
     # ------------------------------
     # Panel de información
     # ------------------------------
-    def show_info(self, index):
-        path = self.model.filePath(index)
+    def show_info(self, current_index, previous_index=None):
+        if not current_index.isValid():
+            return
+        path = self.model.filePath(current_index)
+
+        # Preview
+        self.preview_label.clear()
+        if os.path.isfile(path):
+            mimetype, _ = mimetypes.guess_type(path)
+            if mimetype and mimetype.startswith("image"):
+                pixmap = QPixmap(path)
+                if not pixmap.isNull():
+                    pixmap = pixmap.scaledToWidth(250, Qt.SmoothTransformation)
+                    self.preview_label.setPixmap(pixmap)
+
+        # Info detallada
         info_text = f"Ruta: {path}\n"
         if os.path.isdir(path):
             try:
                 entries = os.listdir(path)
-                folders = sum(os.path.isdir(os.path.join(path,e)) for e in entries)
-                files = sum(os.path.isfile(os.path.join(path,e)) for e in entries)
+                folders = sum(os.path.isdir(os.path.join(path, e)) for e in entries)
+                files = sum(os.path.isfile(os.path.join(path, e)) for e in entries)
                 info_text += f"Tipo: Carpeta\nSubcarpetas: {folders}\nArchivos: {files}\n"
             except PermissionError:
                 info_text += "Tipo: Carpeta\n(No se puede acceder al contenido)\n"
@@ -149,19 +174,17 @@ class MiniExplorer(QWidget):
             modified = datetime.fromtimestamp(os.path.getmtime(path)).strftime("%Y-%m-%d %H:%M:%S")
             info_text += f"Tipo: Archivo\nExtensión: {ext}\nTamaño: {size} bytes\nCreación: {created}\nModificación: {modified}\n"
 
-            mimetype,_ = mimetypes.guess_type(path)
-            if mimetype and mimetype.startswith("image"):
-                pixmap = QPixmap(path)
-                if not pixmap.isNull():
-                    pixmap = pixmap.scaledToWidth(250, Qt.SmoothTransformation)
-                    self.info_panel.clear()
-                    self.info_panel.append(info_text)
-                    self.info_panel.append("\nVista previa:")
-                    self.info_panel.document().addResource(1, path, pixmap)
-                    self.info_panel.append(f'<img src="{path}">')
-                    return
+        self.info_text.setPlainText(info_text)
 
-        self.info_panel.setPlainText(info_text)
+        # Botón nombre (para copiar ruta)
+        self.name_button.setText(os.path.basename(path))
+        self.name_button.setEnabled(True)
+        try:
+            self.name_button.clicked.disconnect()
+        except (TypeError, RuntimeWarning):
+            pass
+        self.name_button.clicked.connect(lambda p=path: QApplication.clipboard().setText(p))
+
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
